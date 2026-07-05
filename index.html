@@ -269,21 +269,21 @@
       <div class="row">
         <div class="col">
           <label>Client Name</label>
-          <input id="clientName" value="someone" />
+          <input id="clientName" value="" placeholder="e.g. Client Company Name" />
         </div>
         <div class="col">
           <label>Email Address</label>
-          <input id="clientEmail" value="ex@mple.com" />
+          <input id="clientEmail" value="" placeholder="e.g. client@email.com" />
         </div>
       </div>
       <div class="row">
         <div class="col">
           <label>Address</label>
-          <textarea id="clientAddress">street n° &#10; code city&#10;country</textarea>
+          <textarea id="clientAddress" placeholder="Street name and nr&#10;Postal code and city&#10;Country"></textarea>
         </div>
         <div class="col">
-          <label>Phone Number</label>
-          <input id="clientPhone" value="VAT: " />
+          <label>Phone / VAT Number</label>
+          <input id="clientPhone" value="" placeholder="e.g. VAT: BE0123.456.789" />
         </div>
       </div>
 
@@ -311,7 +311,14 @@
           <input id="extraDiscount" type="number" step="0.01" value="0.00" />
         </div>
         <div class="col">
-          <label>Shipping Costs (Excl. VAT)</label>
+          <label>Shipping Input Mode</label>
+          <select id="shippingType">
+            <option value="excl" selected>Excl. VAT</option>
+            <option value="incl">Incl. VAT</option>
+          </select>
+        </div>
+        <div class="col">
+          <label>Shipping Costs (€)</label>
           <input id="extraShipping" type="number" step="0.01" value="0.00" />
         </div>
         <div class="col">
@@ -340,7 +347,6 @@
     let currentNumber = "2026-003";
     let logoBase64 = "";
 
-    // Preload logo and convert to base64
     function preloadLogo() {
       const img = new Image();
       img.src = "trepkot-logo.png";
@@ -398,11 +404,23 @@
     }
 
     function init() {
-      document.getElementById("invDate").value = "2026-02-26";
-      document.getElementById("dueDate").value = "2026-03-11";
+      // Automatically target and format today's current date string
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      document.getElementById("invDate").value = `${yyyy}-${mm}-${dd}`;
+
+      // Calculate automatic default +14 days due date structure
+      const defaultDue = new Date();
+      defaultDue.setDate(today.getDate() + 14);
+      const dy = defaultDue.getFullYear();
+      const dm = String(defaultDue.getMonth() + 1).padStart(2, '0');
+      const dd_due = String(defaultDue.getDate()).padStart(2, '0');
+      document.getElementById("dueDate").value = `${dy}-${dm}-${dd_due}`;
       
-      // Seed initial example data
-      addInvoiceItemRow('vinyl part 100 LP’s yellowred \nall inclusive', 721.00, 21, 'excl');
+      // Start with one blank invoice line ready to use
+      addInvoiceItemRow('', 0.00, 21, 'excl');
       
       preloadLogo();
     }
@@ -424,12 +442,10 @@
         let totalAmount = 0;
 
         if (inputType === 'incl') {
-          // If input is inclusive, mathematically back-calculate the base price
           priceExcl = rawAmount / (1 + (vatRate / 100));
           vatAmount = rawAmount - priceExcl;
           totalAmount = rawAmount;
         } else {
-          // Standard calculation logic
           priceExcl = rawAmount;
           vatAmount = priceExcl * (vatRate / 100);
           totalAmount = priceExcl + vatAmount;
@@ -448,11 +464,26 @@
         discountVatReduction = discount * effectiveVatRate;
       }
 
-      const shipping = parseFloat(document.getElementById('extraShipping').value) || 0;
+      // Handle Shipping calculation with Excl/Incl logic
+      const rawShipping = parseFloat(document.getElementById('extraShipping').value) || 0;
+      const shippingType = document.getElementById('shippingType').value;
       const shippingVatRate = parseFloat(document.getElementById('shippingVatRate').value) || 0;
-      const shippingVat = shipping * (shippingVatRate / 100);
+      
+      let shippingExcl = 0;
+      let shippingVat = 0;
+      let shippingTotal = 0;
 
-      const finalSubtotalExcl = subtotalExcl - discount + shipping;
+      if (shippingType === 'incl') {
+        shippingExcl = rawShipping / (1 + (shippingVatRate / 100));
+        shippingVat = rawShipping - shippingExcl;
+        shippingTotal = rawShipping;
+      } else {
+        shippingExcl = rawShipping;
+        shippingVat = shippingExcl * (shippingVatRate / 100);
+        shippingTotal = shippingExcl + shippingVat;
+      }
+
+      const finalSubtotalExcl = subtotalExcl - discount + shippingExcl;
       const finalTotalVat = totalVat - discountVatReduction + shippingVat;
       const grandTotal = finalSubtotalExcl + finalTotalVat;
 
@@ -462,8 +493,10 @@
         baseVat: totalVat,
         discount,
         discountVatReduction,
-        shipping,
+        shippingExcl,
         shippingVat,
+        shippingTotal,
+        shippingVatRate,
         finalSubtotalExcl,
         finalTotalVat,
         grandTotal
@@ -519,13 +552,13 @@
         `;
       }
 
-      if (data.shipping > 0) {
+      if (data.shippingTotal > 0) {
         tableRowsHtml += `
           <tr>
             <td>Shipping costs</td>
-            <td class="text-right">€ ${data.shipping.toFixed(2)}</td>
-            <td class="text-right">${document.getElementById('shippingVatRate').value}%</td>
-            <td class="text-right">€ ${(data.shipping + data.shippingVat).toFixed(2)}</td>
+            <td class="text-right">€ ${data.shippingExcl.toFixed(2)}</td>
+            <td class="text-right">${data.shippingVatRate}%</td>
+            <td class="text-right">€ ${data.shippingTotal.toFixed(2)}</td>
           </tr>
         `;
       }
@@ -562,8 +595,8 @@
           
           <div class="address-block">
             <h3>Client (To)</h3>
-            <div><strong>${clientName}</strong></div>
-            <div>${clientAddress.replace(/\n/g, '<br>')}</div>
+            <div><strong>${clientName || '<em>No client name entered</em>'}</strong></div>
+            <div>${clientAddress.replace(/\n/g, '<br>') || '<em>No address entered</em>'}</div>
             <div style="margin-top: 5px;">${clientEmail}</div>
             <div>${clientPhone}</div>
           </div>
@@ -690,15 +723,20 @@
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
       yRight += 7;
-      doc.text(clientName, rightColLeft, yRight); yRight += 5;
+      doc.text(clientName || "(No client name)", rightColLeft, yRight); yRight += 5;
       
-      clientAddress.split("\n").forEach(line => {
-        doc.text(line, rightColLeft, yRight);
+      if(clientAddress) {
+        clientAddress.split("\n").forEach(line => {
+          doc.text(line, rightColLeft, yRight);
+          yRight += 5;
+        });
+      } else {
+        doc.text("(No address entered)", rightColLeft, yRight);
         yRight += 5;
-      });
+      }
       yRight += 2;
-      doc.text(clientEmail, rightColLeft, yRight); yRight += 4;
-      doc.text(clientPhone, rightColLeft, yRight);
+      if(clientEmail) { doc.text(clientEmail, rightColLeft, yRight); yRight += 4; }
+      if(clientPhone) { doc.text(clientPhone, rightColLeft, yRight); }
 
       y = Math.max(yLeft, yRight) + 15;
 
@@ -724,7 +762,7 @@
       doc.setFontSize(9);
 
       data.items.forEach(item => {
-        const lines = doc.splitTextToSize(item.desc, 65);
+        const lines = doc.splitTextToSize(item.desc || " ", 65);
         const rowHeight = Math.max(8, lines.length * 5);
         doc.rect(marginLeft, y, 170 - marginLeft, rowHeight);
         
@@ -751,12 +789,12 @@
         y += 8;
       }
 
-      if (data.shipping > 0) {
+      if (data.shippingTotal > 0) {
         doc.rect(marginLeft, y, 170 - marginLeft, 8);
         doc.text("Shipping costs", c1, y + 5.5);
-        doc.text(`€ ${data.shipping.toFixed(2)}`, c2, y + 5.5, { align: "right" });
-        doc.text(`${document.getElementById('shippingVatRate').value}%`, c3, y + 5.5, { align: "right" });
-        doc.text(`€ ${(data.shipping + data.shippingVat).toFixed(2)}`, c4, y + 5.5, { align: "right" });
+        doc.text(`€ ${data.shippingExcl.toFixed(2)}`, c2, y + 5.5, { align: "right" });
+        doc.text(`${data.shippingVatRate}%`, c3, y + 5.5, { align: "right" });
+        doc.text(`€ ${data.shippingTotal.toFixed(2)}`, c4, y + 5.5, { align: "right" });
         y += 8;
       }
 
